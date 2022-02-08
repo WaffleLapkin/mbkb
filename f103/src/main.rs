@@ -76,7 +76,7 @@ const APP: () = {
 
         let usb_dev = UsbDeviceBuilder::new(USB_BUS.as_ref().unwrap(), UsbVidPid(0xc410, 0x0000))
             .manufacturer("Fake company")
-            .product("not mouse")
+            .product("not a mouse")
             .serial_number("TEST")
             .device_class(0)
             .build();
