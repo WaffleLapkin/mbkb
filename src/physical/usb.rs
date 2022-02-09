@@ -5,23 +5,23 @@ use crate::{physical, physical::Report, KeyCode};
 pub const USB_CLASS_HID: u8 = 0x03;
 
 const USB_SUBCLASS_NONE: u8 = 0x00;
-const USB_SUBCLASS_BOOT: u8 = 0x01;
+//const USB_SUBCLASS_BOOT: u8 = 0x01;
 
-const USB_INTERFACE_NONE: u8 = 0x00;
+//const USB_INTERFACE_NONE: u8 = 0x00;
 const USB_INTERFACE_KEYBOARD: u8 = 0x01;
 //const USB_INTERFACE_MOUSE: u8 = 0x02;
 
 // As defined in https://www.usb.org/sites/default/files/hid1_11.pdf p 49/59 (wtitten/real)
 const DESCRIPTOR_TYPE_HID: u8 = 0x21;
 const DESCRIPTOR_TYPE_REPORT: u8 = 0x22;
-const DESCRIPTOR_TYPE_PHYSICAL: u8 = 0x23;
+//const DESCRIPTOR_TYPE_PHYSICAL: u8 = 0x23;
 
 const REQ_GET_REPORT: u8 = 0x01;
-const REQ_GET_IDLE: u8 = 0x02;
-const REQ_GET_PROTOCOL: u8 = 0x03;
-const REQ_SET_REPORT: u8 = 0x09;
-const REQ_SET_IDLE: u8 = 0x0a;
-const REQ_SET_PROTOCOL: u8 = 0x0b;
+// const REQ_GET_IDLE: u8 = 0x02;
+// const REQ_GET_PROTOCOL: u8 = 0x03;
+// const REQ_SET_REPORT: u8 = 0x09;
+// const REQ_SET_IDLE: u8 = 0x0a;
+// const REQ_SET_PROTOCOL: u8 = 0x0b;
 
 const REPORT_DESCR: &[u8] = &[
     0x05, 0x01, // USAGE_PAGE (Generic Desktop)
