@@ -3,6 +3,8 @@
 
 extern crate panic_semihosting;
 
+use core::iter::Cycle;
+
 use cortex_m::{asm::delay, peripheral::DWT};
 use embedded_hal::digital::v2::OutputPin;
 use mbkb::physical::Physical;
@@ -94,70 +96,29 @@ const APP: () = {
     }
 
     #[task(schedule = [on_tick], resources = [counter, led, hid])]
-    fn on_tick(mut cx: on_tick::Context) {
-        static mut KEYS: Keys<'static> = Keys {
-            text: LOREM,
-            last: None,
-        };
-
-        // const MESSAGE: &[KeyCode] = &[
-        //     KeyCode::A,
-        //     KeyCode::B,
-        //     KeyCode::C,
-        //     KeyCode::D,
-        //     KeyCode::E,
-        //     KeyCode::F,
-        //     KeyCode::G,
-        //     KeyCode::H,
-        //     KeyCode::I,
-        //     KeyCode::J,
-        //     KeyCode::K,
-        //     KeyCode::L,
-        //     KeyCode::M,
-        //     KeyCode::N,
-        //     KeyCode::O,
-        //     KeyCode::P,
-        //     KeyCode::Q,
-        //     KeyCode::R,
-        //     KeyCode::S,
-        //     KeyCode::T,
-        //     KeyCode::U,
-        //     KeyCode::V,
-        //     KeyCode::W,
-        //     KeyCode::X,
-        //     KeyCode::Y,
-        //     KeyCode::Z,
-        //     KeyCode::Enter,
-        // ];
+    fn on_tick(cx: on_tick::Context) {
+        static mut KEYS: Option<Cycle<Keys<'static>>> = None;
 
         cx.schedule.on_tick(Instant::now() + PERIOD.cycles()).ok();
 
-        let counter: &mut u8 = &mut cx.resources.counter;
-        let led = &mut cx.resources.led;
-        let hid = &mut cx.resources.hid;
+        let counter = &mut *cx.resources.counter;
+        let led = &mut *cx.resources.led;
+        let hid = &mut *cx.resources.hid;
+        let keys = KEYS.get_or_insert_with(|| Keys { text: LOREM }.cycle());
 
         const P: u8 = 2;
         *counter = (*counter + 1) % P;
-
-        if KEYS.text.is_empty() {
-            *KEYS = Keys {
-                text: LOREM,
-                last: None,
-            };
-        }
 
         let mut report = HidReport::empty();
         if *counter < P / 2 {
             led.set_high().ok();
 
-            //report.press(MESSAGE[*offset]);
-
-            //MESSAGE.iter().for_each(|&kc| report.press(kc));
-            KEYS.for_each(|kc| report.press(kc));
+            keys.next()
+                .into_iter()
+                .flatten()
+                .for_each(|kc| report.press(kc));
         } else {
             led.set_low().ok();
-
-            //*offset = (*offset + 1) % MESSAGE.len();
         }
 
         hid.set_report(report);
@@ -215,34 +176,59 @@ fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in
 culpa qui officia deserunt mollit anim id est laborum.\n
 ";
 
+/// Converts ascii text to key presses. Note that between key sequences you need to depress all keys.
+#[derive(Clone)]
 struct Keys<'l> {
     text: &'l [u8],
-    last: Option<u8>,
 }
 
-impl Iterator for Keys<'_> {
+impl<'l> Iterator for Keys<'l> {
+    type Item = KeySequence<'l>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let k = |&c: &_| KeyCode::from_ascii(c).unwrap().0;
+        next_group_by(&mut self.text, |a, b| k(a) < k(b)).map(|text| KeySequence { text })
+    }
+}
+
+/// A sequence of keys that can surely be pressed at the same time
+struct KeySequence<'l> {
+    text: &'l [u8],
+}
+
+impl Iterator for KeySequence<'_> {
     type Item = KeyCode;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.text {
-            // TODO: we probably should compare keycode, not ascii char
-            &[x, ref xs @ ..] if cont(x, self.last) => {
-                let (key, _shift) = KeyCode::from_ascii(x).unwrap();
-                self.last = Some(key as _);
+            &[x, ref xs @ ..] => {
                 self.text = xs;
-                Some(key)
+                Some(KeyCode::from_ascii(x).unwrap().0)
             }
-            [] | [_, ..] => {
-                self.last = None;
-                None
-            }
+            [] => None,
         }
     }
 }
 
-fn cont(x: u8, last: Option<u8>) -> bool {
-    match last {
-        None => true,
-        Some(last) => (KeyCode::from_ascii(x).unwrap().0 as u8) > last,
+/// Takes next "group" from `slice` and returns it
+///
+/// "group" is defined as a slice of maximum lenght such that `group.iter().all(f)`.
+fn next_group_by<'l, T>(slice: &mut &'l [T], mut f: impl FnMut(&T, &T) -> bool) -> Option<&'l [T]> {
+    // impl stolen from core::slice::GroupBy::next
+    if slice.is_empty() {
+        None
+    } else {
+        let mut len = 1;
+        let mut iter = slice.windows(2);
+        while let Some([l, r]) = iter.next() {
+            if f(l, r) {
+                len += 1
+            } else {
+                break;
+            }
+        }
+        let (head, tail) = slice.split_at(len);
+        *slice = tail;
+        Some(head)
     }
 }
