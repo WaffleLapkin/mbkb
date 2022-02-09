@@ -3,51 +3,58 @@
 
 extern crate panic_semihosting;
 
-use core::iter::Cycle;
+use mbkb::KeyCode;
 
-use cortex_m::{asm::delay, peripheral::DWT};
-use embedded_hal::digital::v2::OutputPin;
-use mbkb::{
-    physical::{
+#[rtic::app(device = stm32f1xx_hal::stm32, peripherals = true, dispatchers = [EXTI0])]
+mod app {
+    use core::iter::Cycle;
+
+    use cortex_m::{asm::delay, peripheral::DWT};
+    use mbkb::physical::{
         usb::{HIDClass, HidReport},
         Physical, Report,
-    },
-    KeyCode,
-};
-use rtic::cyccnt::{Instant, U32Ext as _};
-use stm32f1xx_hal::{
-    gpio,
-    prelude::*,
-    usb::{Peripheral, UsbBus, UsbBusType},
-};
-use usb_device::{bus, prelude::*};
+    };
+    use stm32f1xx_hal::{
+        gpio,
+        prelude::*,
+        usb::{Peripheral, UsbBus, UsbBusType},
+    };
+    use systick_monotonic::*;
 
-type LED = gpio::gpioc::PC13<gpio::Output<gpio::PushPull>>;
+    use usb_device::{bus, prelude::*};
 
-const PERIOD: u32 = 800_000;
+    use crate::{Keys, LOREM};
 
-#[rtic::app(device = stm32f1xx_hal::stm32, peripherals = true, monotonic = rtic::cyccnt::CYCCNT)]
-const APP: () = {
+    type LED = gpio::gpioc::PC13<gpio::Output<gpio::PushPull>>;
+
+    #[monotonic(binds = SysTick, default = true)]
+    type Mono = Systick<100>; // 100 Hz / 10 ms granularity
+
+    #[local]
     struct Resources {
         counter: u8,
         led: LED,
+        keys: Cycle<Keys<'static>>,
+    }
 
+    #[shared]
+    struct Shared {
+        #[lock_free]
         usb_dev: UsbDevice<'static, UsbBusType>,
+        #[lock_free]
         hid: HIDClass<'static, UsbBusType>,
     }
 
-    #[init(schedule = [on_tick])]
-    fn init(mut cx: init::Context) -> init::LateResources {
-        static mut USB_BUS: Option<bus::UsbBusAllocator<UsbBusType>> = None;
-
+    #[init(local = [USB_BUS: Option<bus::UsbBusAllocator<UsbBusType>> = None])]
+    fn init(mut cx: init::Context) -> (Shared, Resources, init::Monotonics) {
         cx.core.DCB.enable_trace();
         DWT::unlock();
         cx.core.DWT.enable_cycle_counter();
 
         let mut flash = cx.device.FLASH.constrain();
-        let mut rcc = cx.device.RCC.constrain();
+        let rcc = cx.device.RCC.constrain();
 
-        let mut gpioc = cx.device.GPIOC.split(&mut rcc.apb2);
+        let mut gpioc = cx.device.GPIOC.split();
         let led = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
 
         let clocks = rcc
@@ -59,12 +66,15 @@ const APP: () = {
 
         assert!(clocks.usbclk_valid());
 
-        let mut gpioa = cx.device.GPIOA.split(&mut rcc.apb2);
+        // Initialize the monotonic
+        let mono = Systick::new(cx.core.SYST, clocks.sysclk().0);
+
+        let mut gpioa = cx.device.GPIOA.split();
 
         // BluePill board has a pull-up resistor on the D+ line.
         // Pull the D+ pin down to send a RESET condition to the USB bus.
         let mut usb_dp = gpioa.pa12.into_push_pull_output(&mut gpioa.crh);
-        usb_dp.set_low().ok();
+        usb_dp.set_low();
         delay(clocks.sysclk().0 / 100);
 
         let usb_dm = gpioa.pa11;
@@ -76,11 +86,11 @@ const APP: () = {
             pin_dp: usb_dp,
         };
 
-        *USB_BUS = Some(UsbBus::new(usb));
+        let usb_bus = cx.local.USB_BUS.insert(UsbBus::new(usb));
 
-        let hid = HIDClass::new(USB_BUS.as_ref().unwrap());
+        let hid = HIDClass::new(usb_bus);
 
-        let usb_dev = UsbDeviceBuilder::new(USB_BUS.as_ref().unwrap(), UsbVidPid(0xc410, 0x0000))
+        let usb_dev = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0xc410, 0x0000))
             .manufacturer("Fake company")
             .product("not a mouse")
             .serial_number("TEST")
@@ -88,86 +98,62 @@ const APP: () = {
             .build();
 
         // Wait some time so usb can connect
-        cx.schedule.on_tick(cx.start + (PERIOD * 64).cycles()).ok();
+        on_tick::spawn_after(1.secs()).ok();
 
-        init::LateResources {
+        let local = Resources {
             counter: 0,
             led,
+            keys: Keys { text: LOREM }.cycle(),
+        };
+        let shared = Shared { usb_dev, hid };
 
-            usb_dev,
-            hid,
-        }
+        (shared, local, init::Monotonics(mono))
     }
 
-    #[task(schedule = [on_tick], resources = [counter, led, hid])]
+    #[task(local = [counter, led, keys], shared=[hid])]
     fn on_tick(cx: on_tick::Context) {
-        static mut KEYS: Option<Cycle<Keys<'static>>> = None;
+        on_tick::spawn_after(16.millis()).ok(); // Instant::now() + PERIOD.cycles()
 
-        cx.schedule.on_tick(Instant::now() + PERIOD.cycles()).ok();
-
-        let counter = &mut *cx.resources.counter;
-        let led = &mut *cx.resources.led;
-        let hid = &mut *cx.resources.hid;
-        let keys = KEYS.get_or_insert_with(|| Keys { text: LOREM }.cycle());
+        let counter = &mut *cx.local.counter;
+        let led = &mut *cx.local.led;
+        let hid = &mut *cx.shared.hid;
+        let keys = &mut *cx.local.keys;
 
         const P: u8 = 2;
         *counter = (*counter + 1) % P;
 
         let mut report = HidReport::empty();
         if *counter < P / 2 {
-            led.set_high().ok();
+            led.set_high();
 
             keys.next()
                 .into_iter()
                 .flatten()
                 .for_each(|kc| report.press(kc));
         } else {
-            led.set_low().ok();
+            led.set_low();
         }
 
         hid.set_report(report);
     }
 
-    #[task(binds=USB_HP_CAN_TX, resources = [counter, led, usb_dev, hid])]
+    #[task(binds=USB_HP_CAN_TX, shared=[usb_dev, hid])]
     fn usb_tx(mut cx: usb_tx::Context) {
-        usb_poll(
-            &mut cx.resources.counter,
-            &mut cx.resources.led,
-            &mut cx.resources.usb_dev,
-            &mut cx.resources.hid,
-        );
+        usb_poll(&mut cx.shared.usb_dev, &mut cx.shared.hid);
     }
 
-    #[task(binds=USB_LP_CAN_RX0, resources = [counter, led, usb_dev, hid])]
+    #[task(binds=USB_LP_CAN_RX0, shared=[usb_dev, hid])]
     fn usb_rx(mut cx: usb_rx::Context) {
-        usb_poll(
-            &mut cx.resources.counter,
-            &mut cx.resources.led,
-            &mut cx.resources.usb_dev,
-            &mut cx.resources.hid,
-        );
+        usb_poll(&mut cx.shared.usb_dev, &mut cx.shared.hid);
     }
 
-    #[idle]
-    fn idle(_: idle::Context) -> ! {
-        loop {
-            cortex_m::asm::nop();
+    fn usb_poll<B: bus::UsbBus>(
+        usb_dev: &mut UsbDevice<'static, B>,
+        hid: &mut HIDClass<'static, B>,
+    ) {
+        if !usb_dev.poll(&mut [hid]) {
+            return;
         }
-    }
-
-    extern "C" {
-        fn EXTI0();
-    }
-};
-
-fn usb_poll<B: bus::UsbBus>(
-    _counter: &mut u8,
-    _led: &mut LED,
-    usb_dev: &mut UsbDevice<'static, B>,
-    hid: &mut HIDClass<'static, B>,
-) {
-    if !usb_dev.poll(&mut [hid]) {
-        return;
     }
 }
 
@@ -183,7 +169,7 @@ culpa qui officia deserunt mollit anim id est laborum.\n
 /// Converts ascii text to key presses. Note that between key sequences you need
 /// to depress all keys.
 #[derive(Clone)]
-struct Keys<'l> {
+pub struct Keys<'l> {
     text: &'l [u8],
 }
 
@@ -197,7 +183,7 @@ impl<'l> Iterator for Keys<'l> {
 }
 
 /// A sequence of keys that can surely be pressed at the same time
-struct KeySequence<'l> {
+pub struct KeySequence<'l> {
     text: &'l [u8],
 }
 

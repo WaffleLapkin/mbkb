@@ -6,14 +6,15 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cortex-m = "0.6"
-cortex-m-rt = "0.6"
-stm32f1xx-hal = { version = "0.7", features = ["stm32f103", "stm32-usbd", "rt"] }
+cortex-m = "0.7"
+cortex-m-rt = "0.7"
+stm32f1xx-hal = { version = "0.8", features = ["stm32f103", "stm32-usbd", "rt"] }
 panic-semihosting = "0.5"
-usb-device = "0.2.4"
+usb-device = "0.2"
 usbd-serial = "0.1"
-usbd-webusb = "1.0.0"
-embedded-hal = "0.2.3"
-cortex-m-rtic = "0.5"
+usbd-webusb = "1.0"
+embedded-hal = "0.2"
+cortex-m-rtic = "1.0"
+systick-monotonic = "1.0"
 
 mbkb = { path = ".." }
