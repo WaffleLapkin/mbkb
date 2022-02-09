@@ -1,9 +1,6 @@
-use usb_device::class_prelude::*;
-use usb_device::Result;
+use usb_device::{class_prelude::*, Result};
 
-use crate::physical;
-use crate::physical::Report;
-use crate::KeyCode;
+use crate::{physical, physical::Report, KeyCode};
 
 pub const USB_CLASS_HID: u8 = 0x03;
 
@@ -78,8 +75,9 @@ pub struct HIDClass<'a, B: UsbBus> {
 }
 
 impl<B: UsbBus> HIDClass<'_, B> {
-    /// Creates a new HIDClass with the provided UsbBus and max_packet_size in bytes. For
-    /// full-speed devices, max_packet_size has to be one of 8, 16, 32 or 64.
+    /// Creates a new HIDClass with the provided UsbBus and max_packet_size in
+    /// bytes. For full-speed devices, max_packet_size has to be one of 8,
+    /// 16, 32 or 64.
     pub fn new(alloc: &UsbBusAllocator<B>) -> HIDClass<'_, B> {
         HIDClass {
             report: HidReport::empty(),

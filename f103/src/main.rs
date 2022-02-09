@@ -7,16 +7,20 @@ use core::iter::Cycle;
 
 use cortex_m::{asm::delay, peripheral::DWT};
 use embedded_hal::digital::v2::OutputPin;
-use mbkb::physical::Physical;
-use mbkb::physical::Report;
-use mbkb::KeyCode;
+use mbkb::{
+    physical::{
+        usb::{HIDClass, HidReport},
+        Physical, Report,
+    },
+    KeyCode,
+};
 use rtic::cyccnt::{Instant, U32Ext as _};
-use stm32f1xx_hal::usb::{Peripheral, UsbBus, UsbBusType};
-use stm32f1xx_hal::{gpio, prelude::*};
-use usb_device::bus;
-use usb_device::prelude::*;
-
-use mbkb::physical::usb::{HIDClass, HidReport};
+use stm32f1xx_hal::{
+    gpio,
+    prelude::*,
+    usb::{Peripheral, UsbBus, UsbBusType},
+};
+use usb_device::{bus, prelude::*};
 
 type LED = gpio::gpioc::PC13<gpio::Output<gpio::PushPull>>;
 
@@ -176,7 +180,8 @@ fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in
 culpa qui officia deserunt mollit anim id est laborum.\n
 ";
 
-/// Converts ascii text to key presses. Note that between key sequences you need to depress all keys.
+/// Converts ascii text to key presses. Note that between key sequences you need
+/// to depress all keys.
 #[derive(Clone)]
 struct Keys<'l> {
     text: &'l [u8],
@@ -212,7 +217,8 @@ impl Iterator for KeySequence<'_> {
 
 /// Takes next "group" from `slice` and returns it
 ///
-/// "group" is defined as a slice of maximum lenght such that `group.iter().all(f)`.
+/// "group" is defined as a slice of maximum lenght such that
+/// `group.iter().all(f)`.
 fn next_group_by<'l, T>(slice: &mut &'l [T], mut f: impl FnMut(&T, &T) -> bool) -> Option<&'l [T]> {
     // impl stolen from core::slice::GroupBy::next
     if slice.is_empty() {
