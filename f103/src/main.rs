@@ -183,6 +183,13 @@ const APP: () = {
         );
     }
 
+    #[idle]
+    fn idle(_: idle::Context) -> ! {
+        loop {
+            cortex_m::asm::nop();
+        }
+    }
+
     extern "C" {
         fn EXTI0();
     }
