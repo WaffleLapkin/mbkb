@@ -15,7 +15,6 @@ mod app {
         Physical, Report,
     };
     use stm32f1xx_hal::{
-        gpio,
         prelude::*,
         usb::{Peripheral, UsbBus, UsbBusType},
     };
@@ -25,15 +24,12 @@ mod app {
 
     use crate::{Keys, LOREM};
 
-    type LED = gpio::gpioc::PC13<gpio::Output<gpio::PushPull>>;
-
     #[monotonic(binds = SysTick, default = true)]
     type Mono = Systick<100>; // 100 Hz / 10 ms granularity
 
     #[local]
     struct Resources {
         counter: u8,
-        led: LED,
         keys: Cycle<Keys<'static>>,
     }
 
@@ -53,9 +49,6 @@ mod app {
 
         let mut flash = cx.device.FLASH.constrain();
         let rcc = cx.device.RCC.constrain();
-
-        let mut gpioc = cx.device.GPIOC.split();
-        let led = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
 
         let clocks = rcc
             .cfgr
@@ -102,7 +95,6 @@ mod app {
 
         let local = Resources {
             counter: 0,
-            led,
             keys: Keys { text: LOREM }.cycle(),
         };
         let shared = Shared { usb_dev, hid };
@@ -110,28 +102,24 @@ mod app {
         (shared, local, init::Monotonics(mono))
     }
 
-    #[task(local = [counter, led, keys], shared=[hid])]
+    #[task(local = [counter, keys], shared=[hid])]
     fn on_tick(cx: on_tick::Context) {
         on_tick::spawn_after(16.millis()).ok();
 
         let counter = &mut *cx.local.counter;
-        let led = &mut *cx.local.led;
         let hid = &mut *cx.shared.hid;
         let keys = &mut *cx.local.keys;
 
-        const P: u8 = 2;
-        *counter = (*counter + 1) % P;
+        *counter = (*counter + 1) % 2;
 
         let mut report = HidReport::empty();
-        if *counter < P / 2 {
-            led.set_high();
 
+        // Send empty report every second
+        if *counter == 0 {
             keys.next()
                 .into_iter()
                 .flatten()
                 .for_each(|kc| report.press(kc));
-        } else {
-            led.set_low();
         }
 
         hid.set_report(report);
