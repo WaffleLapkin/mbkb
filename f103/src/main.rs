@@ -112,7 +112,7 @@ mod app {
 
     #[task(local = [counter, led, keys], shared=[hid])]
     fn on_tick(cx: on_tick::Context) {
-        on_tick::spawn_after(16.millis()).ok(); // Instant::now() + PERIOD.cycles()
+        on_tick::spawn_after(16.millis()).ok();
 
         let counter = &mut *cx.local.counter;
         let led = &mut *cx.local.led;
