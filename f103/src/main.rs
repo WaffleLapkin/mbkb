@@ -28,7 +28,7 @@ mod app {
     type Mono = Systick<100>; // 100 Hz / 10 ms granularity
 
     #[local]
-    struct Resources {
+    struct Local {
         counter: u8,
         keys: Cycle<Keys<'static>>,
     }
@@ -41,59 +41,74 @@ mod app {
         hid: HIDClass<'static, UsbBusType>,
     }
 
-    #[init(local = [USB_BUS: Option<bus::UsbBusAllocator<UsbBusType>> = None])]
-    fn init(mut cx: init::Context) -> (Shared, Resources, init::Monotonics) {
+    #[init(local = [usb_bus: Option<bus::UsbBusAllocator<UsbBusType>> = None])]
+    fn init(mut cx: init::Context) -> (Shared, Local, init::Monotonics) {
+        // I do not remember what this does (waffle)
         cx.core.DCB.enable_trace();
         DWT::unlock();
         cx.core.DWT.enable_cycle_counter();
 
-        let mut flash = cx.device.FLASH.constrain();
-        let rcc = cx.device.RCC.constrain();
+        // Clock initialization
+        let (clocks, mono) = {
+            let mut flash = cx.device.FLASH.constrain();
+            let rcc = cx.device.RCC.constrain();
 
-        let clocks = rcc
-            .cfgr
-            .use_hse(8.mhz())
-            .sysclk(48.mhz())
-            .pclk1(24.mhz())
-            .freeze(&mut flash.acr);
+            let clocks = rcc
+                .cfgr
+                .use_hse(8.mhz())
+                .sysclk(48.mhz())
+                .pclk1(24.mhz())
+                .freeze(&mut flash.acr);
 
-        assert!(clocks.usbclk_valid());
+            assert!(clocks.usbclk_valid());
 
-        // Initialize the monotonic
-        let mono = Systick::new(cx.core.SYST, clocks.sysclk().0);
+            // Initialize the monotonic
+            let mono = Systick::new(cx.core.SYST, clocks.sysclk().0);
 
-        let mut gpioa = cx.device.GPIOA.split();
-
-        // BluePill board has a pull-up resistor on the D+ line.
-        // Pull the D+ pin down to send a RESET condition to the USB bus.
-        let mut usb_dp = gpioa.pa12.into_push_pull_output(&mut gpioa.crh);
-        usb_dp.set_low();
-        delay(clocks.sysclk().0 / 100);
-
-        let usb_dm = gpioa.pa11;
-        let usb_dp = usb_dp.into_floating_input(&mut gpioa.crh);
-
-        let usb = Peripheral {
-            usb: cx.device.USB,
-            pin_dm: usb_dm,
-            pin_dp: usb_dp,
+            (clocks, mono)
         };
 
-        let usb_bus = cx.local.USB_BUS.insert(UsbBus::new(usb));
+        // Setup usb
+        let (usb_dev, hid) = {
+            let mut gpioa = cx.device.GPIOA.split();
 
-        let hid = HIDClass::new(usb_bus);
+            // BluePill board has a pull-up resistor on the D+ line.
+            // Pull the D+ pin down to send a RESET condition to the USB bus.
+            let mut usb_dp = gpioa.pa12.into_push_pull_output(&mut gpioa.crh);
+            usb_dp.set_low();
 
-        let usb_dev = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0xc410, 0x0000))
-            .manufacturer("Fake company")
-            .product("not a mouse")
-            .serial_number("TEST")
-            .device_class(0)
-            .build();
+            // Magic delay (I don't know why I've written this) (waffle)
+            delay(clocks.sysclk().0 / 100);
 
-        // Wait some time so usb can connect
+            let usb_dm = gpioa.pa11;
+            let usb_dp = usb_dp.into_floating_input(&mut gpioa.crh);
+
+            let usb = Peripheral {
+                usb: cx.device.USB,
+                pin_dm: usb_dm,
+                pin_dp: usb_dp,
+            };
+
+            let usb_bus = cx.local.usb_bus.insert(UsbBus::new(usb));
+
+            let hid = HIDClass::new(usb_bus);
+
+            let usb_dev = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0xc410, 0x0000))
+                .manufacturer("Fake company")
+                .product("not a mouse")
+                .serial_number("TEST")
+                .device_class(0)
+                .build();
+
+            (usb_dev, hid)
+        };
+
+        // Spawn `on_tick` task that will write text.
+        //
+        // Wait some time so usb can connect.
         on_tick::spawn_after(1.secs()).ok();
 
-        let local = Resources {
+        let local = Local {
             counter: 0,
             keys: Keys { text: LOREM }.cycle(),
         };
@@ -104,6 +119,7 @@ mod app {
 
     #[task(local = [counter, keys], shared=[hid])]
     fn on_tick(cx: on_tick::Context) {
+        // Repeat the same task after 16 ms
         on_tick::spawn_after(16.millis()).ok();
 
         let counter = &mut *cx.local.counter;
@@ -114,7 +130,7 @@ mod app {
 
         let mut report = HidReport::empty();
 
-        // Send empty report every second
+        // Send empty report after non-empty one, so we can press the same keys again
         if *counter == 0 {
             keys.next()
                 .into_iter()
