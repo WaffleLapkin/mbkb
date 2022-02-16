@@ -10,7 +10,7 @@ mod app {
     use core::iter::Cycle;
 
     use cortex_m::{asm::delay, peripheral::DWT};
-    use mbkb::physical::{
+    use mbkb::proto::{
         usb::{HIDClass, HidReport},
         Physical, Report,
     };

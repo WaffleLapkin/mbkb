@@ -1,6 +1,6 @@
 #![no_std]
 
-pub mod physical;
+pub mod proto;
 
 /// Define a key code according to the HID specification.  Their names
 /// correspond to the american QWERTY layout.

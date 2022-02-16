@@ -1,6 +1,6 @@
 use usb_device::{class_prelude::*, Result};
 
-use crate::{physical, physical::Report, KeyCode};
+use crate::{proto, proto::Report, KeyCode};
 
 pub const USB_CLASS_HID: u8 = 0x03;
 
@@ -91,7 +91,7 @@ impl<B: UsbBus> HIDClass<'_, B> {
     }
 }
 
-impl<B: UsbBus> physical::Physical for HIDClass<'_, B> {
+impl<B: UsbBus> proto::Physical for HIDClass<'_, B> {
     type Report = HidReport;
 
     fn set_report(&mut self, report: Self::Report) {
