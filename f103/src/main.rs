@@ -3,18 +3,19 @@
 
 extern crate panic_semihosting;
 
-use mbkb::KeyCode;
-
 #[rtic::app(device = stm32f1xx_hal::stm32, peripherals = true, dispatchers = [EXTI0])]
 mod app {
-    use core::iter::Cycle;
-
     use cortex_m::{asm::delay, peripheral::DWT};
-    use mbkb::proto::{
-        usb::{HIDClass, HidReport},
-        Physical, Report,
+    use mbkb::{
+        phy::{self, Layout},
+        proto::{
+            usb::{HIDClass, HidReport},
+            Physical, Report,
+        },
+        KeyCode,
     };
     use stm32f1xx_hal::{
+        gpio::{ErasedPin, Input, PullUp},
         prelude::*,
         usb::{Peripheral, UsbBus, UsbBusType},
     };
@@ -22,15 +23,12 @@ mod app {
 
     use usb_device::{bus, prelude::*};
 
-    use crate::{Keys, LOREM};
-
     #[monotonic(binds = SysTick, default = true)]
     type Mono = Systick<100>; // 100 Hz / 10 ms granularity
 
     #[local]
     struct Local {
-        counter: u8,
-        keys: Cycle<Keys<'static>>,
+        phy_layout: phy::layouts::Array<ErasedPin<Input<PullUp>>, 4>,
     }
 
     #[shared]
@@ -103,40 +101,43 @@ mod app {
             (usb_dev, hid)
         };
 
-        // Spawn `on_tick` task that will write text.
+        let phy_layout = {
+            let mut gpiob = cx.device.GPIOB.split();
+            let pins = [
+                gpiob.pb12.into_pull_up_input(&mut gpiob.crh).erase(),
+                gpiob.pb13.into_pull_up_input(&mut gpiob.crh).erase(),
+                gpiob.pb14.into_pull_up_input(&mut gpiob.crh).erase(),
+                gpiob.pb15.into_pull_up_input(&mut gpiob.crh).erase(),
+            ];
+
+            phy::layouts::Array::new(pins)
+        };
+
+        // Spawn `on_tick` task that will poll buttons.
         //
-        // Wait some time so usb can connect.
+        // Wait some time so usb can connect first.
         on_tick::spawn_after(1.secs()).ok();
 
-        let local = Local {
-            counter: 0,
-            keys: Keys { text: LOREM }.cycle(),
-        };
+        let local = Local { phy_layout };
         let shared = Shared { usb_dev, hid };
 
         (shared, local, init::Monotonics(mono))
     }
 
-    #[task(local = [counter, keys], shared=[hid])]
+    #[task(local = [phy_layout], shared=[hid])]
     fn on_tick(cx: on_tick::Context) {
         // Repeat the same task after 16 ms
         on_tick::spawn_after(16.millis()).ok();
 
-        let counter = &mut *cx.local.counter;
         let hid = &mut *cx.shared.hid;
-        let keys = &mut *cx.local.keys;
-
-        *counter = (*counter + 1) % 2;
+        let phy_layout = &mut *cx.local.phy_layout;
 
         let mut report = HidReport::empty();
 
-        // Send empty report after non-empty one, so we can press the same keys again
-        if *counter == 0 {
-            keys.next()
-                .into_iter()
-                .flatten()
-                .for_each(|kc| report.press(kc));
-        }
+        phy_layout.poll().for_each(|key| {
+            let (kc, _shiftness) = KeyCode::from_ascii(b"abcd"[key.into_raw() as usize]).unwrap();
+            report.press(kc)
+        });
 
         hid.set_report(report);
     }
@@ -158,73 +159,5 @@ mod app {
         if !usb_dev.poll(&mut [hid]) {
             return;
         }
-    }
-}
-
-const LOREM: &[u8] = b"\
-Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor
-incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis
-nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
-Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu
-fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in
-culpa qui officia deserunt mollit anim id est laborum.\n
-";
-
-/// Converts ascii text to key presses. Note that between key sequences you need
-/// to depress all keys.
-#[derive(Clone)]
-pub struct Keys<'l> {
-    text: &'l [u8],
-}
-
-impl<'l> Iterator for Keys<'l> {
-    type Item = KeySequence<'l>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let k = |&c: &_| KeyCode::from_ascii(c).unwrap().0;
-        next_group_by(&mut self.text, |a, b| k(a) < k(b)).map(|text| KeySequence { text })
-    }
-}
-
-/// A sequence of keys that can surely be pressed at the same time
-pub struct KeySequence<'l> {
-    text: &'l [u8],
-}
-
-impl Iterator for KeySequence<'_> {
-    type Item = KeyCode;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.text {
-            &[x, ref xs @ ..] => {
-                self.text = xs;
-                Some(KeyCode::from_ascii(x).unwrap().0)
-            }
-            [] => None,
-        }
-    }
-}
-
-/// Takes next "group" from `slice` and returns it
-///
-/// "group" is defined as a slice of maximum lenght such that
-/// `group.iter().all(f)`.
-fn next_group_by<'l, T>(slice: &mut &'l [T], mut f: impl FnMut(&T, &T) -> bool) -> Option<&'l [T]> {
-    // impl stolen from core::slice::GroupBy::next
-    if slice.is_empty() {
-        None
-    } else {
-        let mut len = 1;
-        let mut iter = slice.windows(2);
-        while let Some([l, r]) = iter.next() {
-            if f(l, r) {
-                len += 1
-            } else {
-                break;
-            }
-        }
-        let (head, tail) = slice.split_at(len);
-        *slice = tail;
-        Some(head)
     }
 }
