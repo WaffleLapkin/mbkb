@@ -4,7 +4,7 @@ use embedded_hal::digital::v2::InputPin;
 
 use crate::phy::{KeyId, Layout};
 
-/// Array phisical layout - every key has it's own pin.
+/// Array physical layout - every key has it's own pin.
 ///
 /// **Note**: this layout expects **pull up** pins, i.e. low = key is pressed,
 /// high = key is depressed.
@@ -14,7 +14,7 @@ pub struct Array<P, const N: usize> {
 }
 
 impl<P, const N: usize> Array<P, N> {
-    /// Creates new array phisical layout.
+    /// Creates new array physical layout.
     ///
     /// **Note**: this expects **pull up** pins, i.e. low = key pressed, high =
     /// key is depressed.

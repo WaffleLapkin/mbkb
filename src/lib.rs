@@ -20,7 +20,7 @@ pub enum KeyCode {
     ErrorRollOver,
     /// The POST fail error.
     PostFail,
-    /// An undefined error occured.
+    /// An undefined error occurred.
     ErrorUndefined,
     /// `a` and `A`.
     A,

@@ -1,6 +1,9 @@
 use usb_device::{class_prelude::*, Result};
 
-use crate::{proto, proto::Report, KeyCode};
+use crate::{
+    proto::{self, Report},
+    KeyCode,
+};
 
 pub const USB_CLASS_HID: u8 = 0x03;
 
@@ -11,7 +14,7 @@ const USB_SUBCLASS_NONE: u8 = 0x00;
 const USB_INTERFACE_KEYBOARD: u8 = 0x01;
 //const USB_INTERFACE_MOUSE: u8 = 0x02;
 
-// As defined in https://www.usb.org/sites/default/files/hid1_11.pdf p 49/59 (wtitten/real)
+// As defined in https://www.usb.org/sites/default/files/hid1_11.pdf p 49/59 (written/real)
 const DESCRIPTOR_TYPE_HID: u8 = 0x21;
 const DESCRIPTOR_TYPE_REPORT: u8 = 0x22;
 //const DESCRIPTOR_TYPE_PHYSICAL: u8 = 0x23;
@@ -28,13 +31,13 @@ const REPORT_DESCR: &[u8] = &[
     0x09, 0x06, // USAGE (Keyboard)
     0xa1, 0x01, // COLLECTION (Application)
     0x05, 0x07, //   USAGE_PAGE (Keyboard/Keypad)
-    0x19, 0x01, //   Usage minumum (0x01, Keyboard ErrorRollOver)
+    0x19, 0x01, //   Usage minimum (0x01, Keyboard ErrorRollOver)
     0x29, 0x67, //   Usage maximum (0x67, Keypad =)
     0x15, 0x00, //   Logical Minimum (0)
     0x25, 0x01, //   Logical Maximum (1)
     0x75, 0x01, //   Report Size (1)
     0x95, 0x66, //   Report Count (0x66, 102)
-    0x81, 0x02, //   Input (Data, Variabl, Absolute)
+    0x81, 0x02, //   Input (Data, Variable, Absolute)
     0x95, 0x02, //   Report Count (0x02, 2)
     0x81, 0x03, //   Input (Constant, Variable, Absolute)
     0xc0, //       END_COLLECTION
@@ -124,7 +127,7 @@ impl<B: UsbBus> UsbClass<B> for HIDClass<'_, B> {
             &[
                 0x11,                   // bcdHID
                 0x01,                   // bcdHID (1.11)
-                0x00,                   // bContryCode
+                0x00,                   // bCountryCode
                 0x01,                   // bNumDescriptors (1)
                 DESCRIPTOR_TYPE_REPORT, // bDescriptorType (report)
                 descr_len as u8,        // wDescriptorLength

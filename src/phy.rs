@@ -8,13 +8,13 @@ pub mod top;
 
 /// Physical layout of a keyboard.
 pub trait Layout {
-    /// Returnes iterator of currently pressed keys.
+    /// Returns iterator of currently pressed keys.
     ///
-    /// Note that [`KeyId`]s should be stable accross calls to [`poll`],
+    /// Note that [`KeyId`]s should be stable across calls to [`poll`],
     /// executions and even non-breaking library changes. i.e. users should be
     /// able to assign meaning to [`KeyId`]s and then save it.
     ///
-    /// It is preffered to choose the smallest possible [`KeyId`]s. For example:
+    /// It is preferred to choose the smallest possible [`KeyId`]s. For example:
     /// if a keyboard has 4 keys, then [`poll`] should return [`KeyId`]s in
     /// range `[KeyId(0); KeyId(4)]` and [`max_key_id`] should return
     /// `KeyId(4)`.
