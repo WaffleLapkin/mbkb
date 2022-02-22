@@ -6,6 +6,11 @@ use crate::phy::{KeyId, Layout};
 
 /// Array physical layout - every key has it's own pin.
 ///
+/// This layout is "effective" when there are no more than 4 keys. If you have
+/// more than 4 keys, `Matrix` layout (to-be-implemented) uses less pins for the
+/// same amount of keys. Since keyboards rarely have this few keys, this layout
+/// is only useful for testing purposes.
+///
 /// **Note**: this layout expects **pull up** pins, i.e. low = key is pressed,
 /// high = key is depressed.
 pub struct Array<P, const N: usize> {
