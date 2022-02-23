@@ -1,51 +1,49 @@
 use usb_device::{class_prelude::*, Result};
 
-use crate::{
-    proto::{self, Report},
-    KeyCode,
-};
+use crate::proto::{KeyCode, Protocol, Report};
 
-pub const USB_CLASS_HID: u8 = 0x03;
+/// Version 1 implementation of the USB keyboard protocol.
+///
+/// This version uses 13 byte bitset as the report, each key translates to a
+/// single bit. As such, it is N-key-rollout — there isn't an upper limit on the
+/// number of keys you can press.
+///
+/// **Note**: in order for this to work, you need to poll the usb device
+/// providing a reference to the [`usb_class`].
+///
+/// **Note 2**: modifiers are not currently supported ":)
+///
+/// [`usb_class`]: UsbV1::usb_class
+pub struct UsbV1<'a, B: UsbBus> {
+    inner: HIDClass<'a, B>,
+}
 
-const USB_SUBCLASS_NONE: u8 = 0x00;
-//const USB_SUBCLASS_BOOT: u8 = 0x01;
+/// [`Report`] of the [`UsbV1`] [`Protocol`].
+pub struct UsbV1Report([u8; 13]);
 
-//const USB_INTERFACE_NONE: u8 = 0x00;
-const USB_INTERFACE_KEYBOARD: u8 = 0x01;
-//const USB_INTERFACE_MOUSE: u8 = 0x02;
+impl<B: UsbBus> UsbV1<'_, B> {
+    /// USB [protocol] implementation (first version).
+    ///
+    /// [protocol]: proto::Protocol
+    pub fn new(alloc: &UsbBusAllocator<B>) -> UsbV1<'_, B> {
+        UsbV1 {
+            inner: HIDClass {
+                report: UsbV1Report::empty(),
+                report_if: alloc.interface(),
+                report_ep: alloc.interrupt(16, 10),
+            },
+        }
+    }
 
-// As defined in https://www.usb.org/sites/default/files/hid1_11.pdf p 49/59 (written/real)
-const DESCRIPTOR_TYPE_HID: u8 = 0x21;
-const DESCRIPTOR_TYPE_REPORT: u8 = 0x22;
-//const DESCRIPTOR_TYPE_PHYSICAL: u8 = 0x23;
+    /// Returns the usb class implementation that needs to be polled in order
+    /// for this protocol to work.
+    pub fn usb_class(&mut self) -> &mut dyn UsbClass<B> /* This could return HIDClass but I'm trying to make API surface smaller */
+    {
+        &mut self.inner
+    }
+}
 
-const REQ_GET_REPORT: u8 = 0x01;
-// const REQ_GET_IDLE: u8 = 0x02;
-// const REQ_GET_PROTOCOL: u8 = 0x03;
-// const REQ_SET_REPORT: u8 = 0x09;
-// const REQ_SET_IDLE: u8 = 0x0a;
-// const REQ_SET_PROTOCOL: u8 = 0x0b;
-
-const REPORT_DESCR: &[u8] = &[
-    0x05, 0x01, // USAGE_PAGE (Generic Desktop)
-    0x09, 0x06, // USAGE (Keyboard)
-    0xa1, 0x01, // COLLECTION (Application)
-    0x05, 0x07, //   USAGE_PAGE (Keyboard/Keypad)
-    0x19, 0x01, //   Usage minimum (0x01, Keyboard ErrorRollOver)
-    0x29, 0x67, //   Usage maximum (0x67, Keypad =)
-    0x15, 0x00, //   Logical Minimum (0)
-    0x25, 0x01, //   Logical Maximum (1)
-    0x75, 0x01, //   Report Size (1)
-    0x95, 0x66, //   Report Count (0x66, 102)
-    0x81, 0x02, //   Input (Data, Variable, Absolute)
-    0x95, 0x02, //   Report Count (0x02, 2)
-    0x81, 0x03, //   Input (Constant, Variable, Absolute)
-    0xc0, //       END_COLLECTION
-];
-
-pub struct HidReport([u8; 13]);
-
-impl Report for HidReport {
+impl Report for UsbV1Report {
     fn empty() -> Self {
         Self(<_>::default())
     }
@@ -62,52 +60,22 @@ impl Report for HidReport {
     }
 }
 
-pub fn report(x: bool) -> [u8; 13] {
-    let mut ret = [0; 13];
-    if x {
-        ret[1] |= !0; // A?
-    }
-
-    ret
-}
-
-pub struct HIDClass<'a, B: UsbBus> {
-    report: HidReport,
-    report_if: InterfaceNumber,
-    report_ep: EndpointIn<'a, B>,
-}
-
-impl<B: UsbBus> HIDClass<'_, B> {
-    /// Creates a new HIDClass with the provided UsbBus and max_packet_size in
-    /// bytes. For full-speed devices, max_packet_size has to be one of 8,
-    /// 16, 32 or 64.
-    pub fn new(alloc: &UsbBusAllocator<B>) -> HIDClass<'_, B> {
-        HIDClass {
-            report: HidReport::empty(),
-            report_if: alloc.interface(),
-            report_ep: alloc.interrupt(16, 10),
-        }
-    }
-
-    pub fn write(&mut self, data: &[u8]) {
-        self.report_ep.write(data).ok();
-    }
-}
-
-impl<B: UsbBus> proto::Physical for HIDClass<'_, B> {
-    type Report = HidReport;
+impl<B: UsbBus> Protocol for UsbV1<'_, B> {
+    type Report = UsbV1Report;
 
     fn set_report(&mut self, report: Self::Report) {
-        if self.report.0 != report.0 {
-            self.write(&report.0);
+        if self.inner.report.0 != report.0 {
+            self.inner.report_ep.write(&report.0).ok();
         }
 
-        self.report = report;
+        self.inner.report = report;
     }
+}
 
-    fn clear(&mut self) {
-        self.report = HidReport::empty();
-    }
+struct HIDClass<'a, B: UsbBus> {
+    report: UsbV1Report,
+    report_if: InterfaceNumber,
+    report_ep: EndpointIn<'a, B>,
 }
 
 impl<B: UsbBus> UsbClass<B> for HIDClass<'_, B> {
@@ -206,3 +174,41 @@ impl<B: UsbBus> UsbClass<B> for HIDClass<'_, B> {
         xfer.reject().ok();
     }
 }
+
+const USB_CLASS_HID: u8 = 0x03;
+
+const USB_SUBCLASS_NONE: u8 = 0x00;
+//const USB_SUBCLASS_BOOT: u8 = 0x01;
+
+//const USB_INTERFACE_NONE: u8 = 0x00;
+const USB_INTERFACE_KEYBOARD: u8 = 0x01;
+//const USB_INTERFACE_MOUSE: u8 = 0x02;
+
+// As defined in https://www.usb.org/sites/default/files/hid1_11.pdf p 49/59 (written/real)
+const DESCRIPTOR_TYPE_HID: u8 = 0x21;
+const DESCRIPTOR_TYPE_REPORT: u8 = 0x22;
+//const DESCRIPTOR_TYPE_PHYSICAL: u8 = 0x23;
+
+const REQ_GET_REPORT: u8 = 0x01;
+// const REQ_GET_IDLE: u8 = 0x02;
+// const REQ_GET_PROTOCOL: u8 = 0x03;
+// const REQ_SET_REPORT: u8 = 0x09;
+// const REQ_SET_IDLE: u8 = 0x0a;
+// const REQ_SET_PROTOCOL: u8 = 0x0b;
+
+const REPORT_DESCR: &[u8] = &[
+    0x05, 0x01, // USAGE_PAGE (Generic Desktop)
+    0x09, 0x06, // USAGE (Keyboard)
+    0xa1, 0x01, // COLLECTION (Application)
+    0x05, 0x07, //   USAGE_PAGE (Keyboard/Keypad)
+    0x19, 0x01, //   Usage minimum (0x01, Keyboard ErrorRollOver)
+    0x29, 0x67, //   Usage maximum (0x67, Keypad =)
+    0x15, 0x00, //   Logical Minimum (0)
+    0x25, 0x01, //   Logical Maximum (1)
+    0x75, 0x01, //   Report Size (1)
+    0x95, 0x66, //   Report Count (0x66, 102)
+    0x81, 0x02, //   Input (Data, Variable, Absolute)
+    0x95, 0x02, //   Report Count (0x02, 2)
+    0x81, 0x03, //   Input (Constant, Variable, Absolute)
+    0xc0, //       END_COLLECTION
+];

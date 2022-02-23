@@ -9,10 +9,9 @@ mod app {
     use mbkb::{
         phy::{self, Layout},
         proto::{
-            usb::{HIDClass, HidReport},
-            Physical, Report,
+            usb::{UsbV1, UsbV1Report},
+            KeyCode, Protocol, Report,
         },
-        KeyCode,
     };
     use stm32f1xx_hal::{
         gpio::{ErasedPin, Input, PullUp},
@@ -21,7 +20,7 @@ mod app {
     };
     use systick_monotonic::*;
 
-    use usb_device::{bus, prelude::*};
+    use usb_device::{bus, class::UsbClass, prelude::*};
 
     #[monotonic(binds = SysTick, default = true)]
     type Mono = Systick<100>; // 100 Hz / 10 ms granularity
@@ -36,7 +35,7 @@ mod app {
         #[lock_free]
         usb_dev: UsbDevice<'static, UsbBusType>,
         #[lock_free]
-        hid: HIDClass<'static, UsbBusType>,
+        proto: UsbV1<'static, UsbBusType>,
     }
 
     #[init(local = [usb_bus: Option<bus::UsbBusAllocator<UsbBusType>> = None])]
@@ -67,7 +66,7 @@ mod app {
         };
 
         // Setup usb
-        let (usb_dev, hid) = {
+        let (usb_dev, proto) = {
             let mut gpioa = cx.device.GPIOA.split();
 
             // BluePill board has a pull-up resistor on the D+ line.
@@ -89,7 +88,7 @@ mod app {
 
             let usb_bus = cx.local.usb_bus.insert(UsbBus::new(usb));
 
-            let hid = HIDClass::new(usb_bus);
+            let proto = UsbV1::new(usb_bus);
 
             let usb_dev = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0xc410, 0x0000))
                 .manufacturer("Fake company")
@@ -98,7 +97,7 @@ mod app {
                 .device_class(0)
                 .build();
 
-            (usb_dev, hid)
+            (usb_dev, proto)
         };
 
         let phy_layout = {
@@ -119,43 +118,43 @@ mod app {
         on_tick::spawn_after(1.secs()).ok();
 
         let local = Local { phy_layout };
-        let shared = Shared { usb_dev, hid };
+        let shared = Shared { usb_dev, proto };
 
         (shared, local, init::Monotonics(mono))
     }
 
-    #[task(local = [phy_layout], shared=[hid])]
+    #[task(local = [phy_layout], shared=[proto])]
     fn on_tick(cx: on_tick::Context) {
         // Repeat the same task after 16 ms
         on_tick::spawn_after(16.millis()).ok();
 
-        let hid = &mut *cx.shared.hid;
+        let proto = &mut *cx.shared.proto;
         let phy_layout = &mut *cx.local.phy_layout;
 
-        let mut report = HidReport::empty();
+        let mut report = UsbV1Report::empty();
 
         phy_layout.poll().for_each(|key| {
             let (kc, _shiftness) = KeyCode::from_ascii(b"abcd"[key.into_raw() as usize]).unwrap();
             report.press(kc)
         });
 
-        hid.set_report(report);
+        proto.set_report(report);
     }
 
-    #[task(binds=USB_HP_CAN_TX, shared=[usb_dev, hid])]
+    #[task(binds=USB_HP_CAN_TX, shared=[usb_dev, proto])]
     fn usb_tx(mut cx: usb_tx::Context) {
-        usb_poll(&mut cx.shared.usb_dev, &mut cx.shared.hid);
+        usb_poll(&mut cx.shared.usb_dev, cx.shared.proto.usb_class());
     }
 
-    #[task(binds=USB_LP_CAN_RX0, shared=[usb_dev, hid])]
+    #[task(binds=USB_LP_CAN_RX0, shared=[usb_dev, proto])]
     fn usb_rx(mut cx: usb_rx::Context) {
-        usb_poll(&mut cx.shared.usb_dev, &mut cx.shared.hid);
+        usb_poll(&mut cx.shared.usb_dev, cx.shared.proto.usb_class());
     }
 
-    fn usb_poll<B: bus::UsbBus>(
-        usb_dev: &mut UsbDevice<'static, B>,
-        hid: &mut HIDClass<'static, B>,
-    ) {
+    fn usb_poll<B>(usb_dev: &mut UsbDevice<'_, B>, hid: &mut dyn UsbClass<B>)
+    where
+        B: bus::UsbBus,
+    {
         if !usb_dev.poll(&mut [hid]) {
             return;
         }
