@@ -4,14 +4,15 @@ use crate::proto::{KeyCode, Protocol, Report};
 
 /// Version 1 implementation of the USB keyboard protocol.
 ///
-/// This version uses 13 byte bitset as the report, each key translates to a
+/// This version uses 14 byte bitset as the report, each key translates to a
 /// single bit. As such, it is N-key-rollout — there isn't an upper limit on the
 /// number of keys you can press.
 ///
 /// **Note**: in order for this to work, you need to poll the usb device
 /// providing a reference to the [`usb_class`].
 ///
-/// **Note 2**: modifiers are not currently supported ":)
+/// **Note 2**: some keys are not supported (currently supported keys are in
+/// ranges `[0x01; 0x67]` and `[0xE0; 0xE7]`)
 ///
 /// [`usb_class`]: UsbV1::usb_class
 pub struct UsbV1<'a, B: UsbBus> {
@@ -19,7 +20,7 @@ pub struct UsbV1<'a, B: UsbBus> {
 }
 
 /// [`Report`] of the [`UsbV1`] [`Protocol`].
-pub struct UsbV1Report([u8; 13]);
+pub struct UsbV1Report([u8; 14]);
 
 impl<B: UsbBus> UsbV1<'_, B> {
     /// USB [protocol] implementation (first version).
@@ -52,9 +53,14 @@ impl Report for UsbV1Report {
         if kc == KeyCode::No {
             return;
         }
-        // TODO: modifiers
 
-        let idx = kc as u8 - 1;
+        let idx = match kc as u8 {
+            // move modifiers to the start
+            kc @ 0xE0..=0xE7 => kc - 0xE0,
+            // - `-1` ignore kc 0
+            // - `+8` move after the modifiers
+            kc => kc - 1 + 8,
+        };
 
         self.0[(idx / 8) as usize] |= 1 << (idx % 8);
     }
@@ -196,18 +202,36 @@ const REQ_GET_REPORT: u8 = 0x01;
 // const REQ_SET_IDLE: u8 = 0x0a;
 // const REQ_SET_PROTOCOL: u8 = 0x0b;
 
+// This describes a keyboard report layout.
+//
+// 14 bytes / 112 bits.
+// - bits 0..8 describe modifier keys (0xE0..=0xE7)
+// - bits 8..110 describe all other keys (0x01..=0x67)
+// - bits 110..112 are padding
+//
+// Note that modifiers must go "before" "normal" keys as we want modifiers
+// affect keys pressed in the same report.
+//
+// FIXME: 0x01 aka ErrorRollOver can probably be ignored?
 const REPORT_DESCR: &[u8] = &[
     0x05, 0x01, // USAGE_PAGE (Generic Desktop)
     0x09, 0x06, // USAGE (Keyboard)
     0xa1, 0x01, // COLLECTION (Application)
     0x05, 0x07, //   USAGE_PAGE (Keyboard/Keypad)
-    0x19, 0x01, //   Usage minimum (0x01, Keyboard ErrorRollOver)
-    0x29, 0x67, //   Usage maximum (0x67, Keypad =)
+    0x75, 0x01, //   Report Size (1)
     0x15, 0x00, //   Logical Minimum (0)
     0x25, 0x01, //   Logical Maximum (1)
-    0x75, 0x01, //   Report Size (1)
+    //
+    0x19, 0xE0, //   Usage minimum (0xE0, Left Control)
+    0x29, 0xE7, //   Usage maximum (0xE7, Right Gui)
+    0x95, 0x08, //   Report Count (0x08, 8)
+    0x81, 0x02, //   Input (Data, Variable, Absolute)
+    //
+    0x19, 0x01, //   Usage minimum (0x01, Keyboard ErrorRollOver)
+    0x29, 0x67, //   Usage maximum (0x67, Keypad =)
     0x95, 0x66, //   Report Count (0x66, 102)
     0x81, 0x02, //   Input (Data, Variable, Absolute)
+    //
     0x95, 0x02, //   Report Count (0x02, 2)
     0x81, 0x03, //   Input (Constant, Variable, Absolute)
     0xc0, //       END_COLLECTION

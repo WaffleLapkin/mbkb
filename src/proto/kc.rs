@@ -213,45 +213,45 @@ pub enum KeyCode {
 
     // // According to QMK, 0xA5-0xDF are not usable on modern keyboards
 
-    // // Modifiers
-    // /// Left Control.
-    // LCtrl = 0xE0,
-    // /// Left Shift.
-    // LShift,
-    // /// Left Alt.
-    // LAlt,
-    // /// Left GUI (the Windows key).
-    // LGui,
-    // /// Right Control.
-    // RCtrl,
-    // /// Right Shift.
-    // RShift,
-    // /// Right Alt (or Alt Gr).
-    // RAlt,
-    // /// Right GUI (the Windows key).
-    // RGui, // 0xE7
-
-    // // // Unofficial
-    // // MediaPlayPause = 0xE8,
-    // // MediaStopCD,
-    // // MediaPreviousSong,
-    // // MediaNextSong,
-    // // MediaEjectCD,
-    // // MediaVolUp,
-    // // MediaVolDown,
-    // // MediaMute,
-    // // MediaWWW, // 0xF0
-    // // MediaBack,
-    // // MediaForward,
-    // // MediaStop,
-    // // MediaFind,
-    // // MediaScrollUp,
-    // // MediaScrollDown,
-    // // MediaEdit,
-    // // MediaSleep,
-    // // MediaCoffee,
-    // // MediaRefresh,
-    // // MediaCalc, // 0xFB
+    // Modifiers
+    /// Left Control.
+    LCtrl = 0xE0,
+    /// Left Shift.
+    LShift,
+    /// Left Alt.
+    LAlt,
+    /// Left GUI (the Windows key).
+    LGui,
+    /// Right Control.
+    RCtrl,
+    /// Right Shift.
+    RShift,
+    /// Right Alt (or Alt Gr).
+    RAlt,
+    /// Right GUI (the Windows key).
+    // 0xE7
+    RGui,
+    // // Unofficial
+    // MediaPlayPause = 0xE8,
+    // MediaStopCD,
+    // MediaPreviousSong,
+    // MediaNextSong,
+    // MediaEjectCD,
+    // MediaVolUp,
+    // MediaVolDown,
+    // MediaMute,
+    // MediaWWW, // 0xF0
+    // MediaBack,
+    // MediaForward,
+    // MediaStop,
+    // MediaFind,
+    // MediaScrollUp,
+    // MediaScrollDown,
+    // MediaEdit,
+    // MediaSleep,
+    // MediaCoffee,
+    // MediaRefresh,
+    // MediaCalc, // 0xFB
 }
 
 impl KeyCode {

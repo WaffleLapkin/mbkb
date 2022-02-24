@@ -134,8 +134,11 @@ mod app {
         let mut report = UsbV1Report::empty();
 
         phy_layout.poll().for_each(|key| {
-            let (kc, _shiftness) = KeyCode::from_ascii(b"abcd"[key.into_raw() as usize]).unwrap();
-            report.press(kc)
+            let (kc, shiftness) = KeyCode::from_ascii(b"AaBb"[key.into_raw() as usize]).unwrap();
+            if shiftness {
+                report.press(KeyCode::LShift);
+            }
+            report.press(kc);
         });
 
         proto.set_report(report);
