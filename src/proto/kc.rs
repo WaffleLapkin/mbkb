@@ -144,74 +144,74 @@ pub enum KeyCode {
     Power,
     /// Keypad `=`.
     KpEqual,
-    // F13,
-    // F14,
-    // F15,
-    // F16,
-    // F17,
-    // F18,
-    // F19,
-    // F20,
-    // F21, // 0x70
-    // F22,
-    // F23,
-    // F24,
-    // Execute,
-    // Help,
-    // Menu,
-    // Select,
-    // Stop,
-    // Again,
-    // Undo,
-    // Cut,
-    // Copy,
-    // Paste,
-    // Find,
-    // Mute,
-    // VolUp, // 0x80
-    // VolDown,
-    // /// Deprecated.
-    // LockingCapsLock,
-    // /// Deprecated.
-    // LockingNumLock,
-    // /// Deprecated.
-    // LockingScrollLock,
-    // /// Keypad `,`, also used for the brazilian keypad period (.) key.
-    // KpComma,
-    // /// Used on AS/400 keyboard
-    // KpEqualSign,
-    // Intl1,
-    // Intl2,
-    // Intl3,
-    // Intl4,
-    // Intl5,
-    // Intl6,
-    // Intl7,
-    // Intl8,
-    // Intl9,
-    // Lang1, // 0x90
-    // Lang2,
-    // Lang3,
-    // Lang4,
-    // Lang5,
-    // Lang6,
-    // Lang7,
-    // Lang8,
-    // Lang9,
-    // AltErase,
-    // SysReq,
-    // Cancel,
-    // Clear,
-    // Prior,
-    // Return,
-    // Separator,
-    // Out, // 0xA0
-    // Oper,
-    // ClearAgain,
-    // CrSel,
-    // ExSel,
+    F13,
+    F14,
+    F15,
+    F16,
+    F17,
+    F18,
+    F19,
+    F20,
+    F21, // 0x70
+    F22,
+    F23,
+    F24,
+    Execute,
+    Help,
+    Menu,
+    Select,
+    Stop,
+    Again,
+    Undo,
+    Cut,
+    Copy,
+    Paste,
+    Find,
+    Mute,
+    VolUp, // 0x80
+    VolDown,
+    /// Deprecated.
+    LockingCapsLock,
+    /// Deprecated.
+    LockingNumLock,
+    /// Deprecated.
+    LockingScrollLock,
+    /// Keypad `,`, also used for the brazilian keypad period (.) key.
+    KpComma,
+    /// Used on AS/400 keyboard
+    KpEqualSign,
+    Intl1,
+    Intl2,
+    Intl3,
+    Intl4,
+    Intl5,
+    Intl6,
+    Intl7,
+    Intl8,
+    Intl9,
+    Lang1, // 0x90
+    Lang2,
+    Lang3,
+    Lang4,
+    Lang5,
+    Lang6,
+    Lang7,
+    Lang8,
+    Lang9,
+    AltErase,
+    SysReq,
+    Cancel,
+    Clear,
+    Prior,
+    Return,
+    Separator,
+    Out, // 0xA0
+    Oper,
+    ClearAgain,
+    CrSel,
+    ExSel,
 
-    // // According to QMK, 0xA5-0xDF are not usable on modern keyboards
+    // According to QMK, 0xA5-0xDF are not usable on modern keyboards
 
     // Modifiers
     /// Left Control.
@@ -231,27 +231,28 @@ pub enum KeyCode {
     /// Right GUI (the Windows key).
     // 0xE7
     RGui,
-    // // Unofficial
-    // MediaPlayPause = 0xE8,
-    // MediaStopCD,
-    // MediaPreviousSong,
-    // MediaNextSong,
-    // MediaEjectCD,
-    // MediaVolUp,
-    // MediaVolDown,
-    // MediaMute,
-    // MediaWWW, // 0xF0
-    // MediaBack,
-    // MediaForward,
-    // MediaStop,
-    // MediaFind,
-    // MediaScrollUp,
-    // MediaScrollDown,
-    // MediaEdit,
-    // MediaSleep,
-    // MediaCoffee,
-    // MediaRefresh,
-    // MediaCalc, // 0xFB
+
+    // Unofficial
+    MediaPlayPause = 0xE8,
+    MediaStopCD,
+    MediaPreviousSong,
+    MediaNextSong,
+    MediaEjectCD,
+    MediaVolUp,
+    MediaVolDown,
+    MediaMute,
+    MediaWWW, // 0xF0
+    MediaBack,
+    MediaForward,
+    MediaStop,
+    MediaFind,
+    MediaScrollUp,
+    MediaScrollDown,
+    MediaEdit,
+    MediaSleep,
+    MediaCoffee,
+    MediaRefresh,
+    MediaCalc, // 0xFB
 }
 
 impl KeyCode {
