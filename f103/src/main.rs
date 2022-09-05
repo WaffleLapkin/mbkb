@@ -36,6 +36,16 @@ mod app {
         usb_dev: UsbDevice<'static, UsbBusType>,
         #[lock_free]
         proto: UsbV1<'static, UsbBusType>,
+
+        #[lock_free]
+        blinky: crate::blinky::BlinkyClass<
+            UsbBusType,
+            stm32f1xx_hal::gpio::gpioc::PC13<
+                stm32f1xx_hal::gpio::Output<stm32f1xx_hal::gpio::PushPull>,
+            >,
+        >,
+        #[lock_free]
+        webusb: usbd_webusb::WebUsb<UsbBusType>,
     }
 
     #[init(local = [usb_bus: Option<bus::UsbBusAllocator<UsbBusType>> = None])]
@@ -66,7 +76,7 @@ mod app {
         };
 
         // Setup usb
-        let (usb_dev, proto) = {
+        let (usb_dev, proto, usb_bus) = {
             let mut gpioa = cx.device.GPIOA.split();
 
             // BluePill board has a pull-up resistor on the D+ line.
@@ -97,7 +107,7 @@ mod app {
                 .device_class(0)
                 .build();
 
-            (usb_dev, proto)
+            (usb_dev, proto, &*usb_bus)
         };
 
         let phy_layout = {
@@ -117,8 +127,21 @@ mod app {
         // Wait some time so usb can connect first.
         on_tick::spawn_after(1.secs()).ok();
 
+        let mut gpioc = cx.device.GPIOC.split();
+        let mut led = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
+        led.set_high();
+
         let local = Local { phy_layout };
-        let shared = Shared { usb_dev, proto };
+        let shared = Shared {
+            usb_dev,
+            proto,
+            blinky: crate::blinky::BlinkyClass::new(usb_bus, led),
+            webusb: usbd_webusb::WebUsb::new(
+                usb_bus,
+                usbd_webusb::url_scheme::HTTPS,
+                "does not really matter",
+            ),
+        };
 
         (shared, local, init::Monotonics(mono))
     }
@@ -144,22 +167,73 @@ mod app {
         proto.set_report(report);
     }
 
-    #[task(binds=USB_HP_CAN_TX, shared=[usb_dev, proto])]
+    #[task(binds=USB_HP_CAN_TX, shared=[usb_dev, proto, blinky, webusb])]
     fn usb_tx(mut cx: usb_tx::Context) {
-        usb_poll(&mut cx.shared.usb_dev, cx.shared.proto.usb_class());
+        usb_poll(
+            &mut cx.shared.usb_dev,
+            cx.shared.proto.usb_class(),
+            cx.shared.blinky,
+            cx.shared.webusb,
+        );
     }
 
-    #[task(binds=USB_LP_CAN_RX0, shared=[usb_dev, proto])]
+    #[task(binds=USB_LP_CAN_RX0, shared=[usb_dev, proto, blinky, webusb])]
     fn usb_rx(mut cx: usb_rx::Context) {
-        usb_poll(&mut cx.shared.usb_dev, cx.shared.proto.usb_class());
+        usb_poll(
+            &mut cx.shared.usb_dev,
+            cx.shared.proto.usb_class(),
+            cx.shared.blinky,
+            cx.shared.webusb,
+        );
     }
 
-    fn usb_poll<B>(usb_dev: &mut UsbDevice<'_, B>, hid: &mut dyn UsbClass<B>)
-    where
+    fn usb_poll<B>(
+        usb_dev: &mut UsbDevice<'_, B>,
+        hid: &mut dyn UsbClass<B>,
+        b: &mut dyn UsbClass<B>,
+        w: &mut dyn UsbClass<B>,
+    ) where
         B: bus::UsbBus,
     {
-        if !usb_dev.poll(&mut [hid]) {
+        if !usb_dev.poll(&mut [hid, b, w]) {
             return;
+        }
+    }
+}
+
+mod blinky {
+    use core::marker::PhantomData;
+    use embedded_hal::digital::v2::OutputPin;
+    use usb_device::class_prelude::*;
+
+    pub struct BlinkyClass<B: UsbBus, LED> {
+        spooky: core::marker::PhantomData<B>,
+        led: LED,
+    }
+
+    impl<B: UsbBus, LED: OutputPin> BlinkyClass<B, LED> {
+        pub fn new(_alloc: &UsbBusAllocator<B>, led: LED) -> Self {
+            Self {
+                spooky: PhantomData,
+                led,
+            }
+        }
+    }
+
+    impl<B: UsbBus, LED: OutputPin> UsbClass<B> for BlinkyClass<B, LED> {
+        fn control_out(&mut self, xfer: ControlOut<B>) {
+            let req = xfer.request();
+
+            if req.request_type == control::RequestType::Vendor
+                && req.recipient == control::Recipient::Device
+                && req.request == 1
+            {
+                if req.value > 0 {
+                    self.led.set_low().ok();
+                } else {
+                    self.led.set_high().ok();
+                }
+            }
         }
     }
 }
