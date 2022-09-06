@@ -1,7 +1,9 @@
 mod kc;
+mod leds;
 pub mod usb;
 
 pub use kc::KeyCode;
+pub use leds::{LedState, LedStates};
 
 /// A protocol that sends information about pressed keys to the host (computer).
 pub trait Protocol {
@@ -23,7 +25,8 @@ pub trait Protocol {
         self.set_report(Self::Report::empty());
     }
 
-    // TODO: add the API to get information about turned on LEDs, maybe?
+    /// Returns current led states.
+    fn leds(&self) -> LedStates;
 }
 
 /// Report type that hold information about currently pressed keys.

@@ -1,6 +1,6 @@
 use usb_device::{class_prelude::*, Result};
 
-use crate::proto::{KeyCode, Protocol, Report};
+use crate::proto::{KeyCode, LedState, LedStates, Protocol, Report};
 
 /// Version 1 implementation of the USB keyboard protocol.
 ///
@@ -30,6 +30,7 @@ impl<B: UsbBus> UsbV1<'_, B> {
         UsbV1 {
             inner: HIDClass {
                 report: UsbV1Report::empty(),
+                leds: LedReport(0),
                 report_if: alloc.interface(),
                 report_ep: alloc.interrupt(16, 10),
             },
@@ -76,10 +77,28 @@ impl<B: UsbBus> Protocol for UsbV1<'_, B> {
 
         self.inner.report = report;
     }
+
+    #[inline(never)]
+    fn leds(&self) -> LedStates {
+        let b = self.inner.leds.0;
+        let f = |i| match i {
+            0 => LedState::Disabled,
+            _ => LedState::Enabled,
+        };
+
+        LedStates {
+            num_lock: f(b & 1 << 0),
+            caps_lock: f(b & 1 << 1),
+            scroll_lock: f(b & 1 << 2),
+            compose: f(b & 1 << 3),
+            kana: f(b & 1 << 4),
+        }
+    }
 }
 
 struct HIDClass<'a, B: UsbBus> {
     report: UsbV1Report,
+    leds: LedReport,
     report_if: InterfaceNumber,
     report_ep: EndpointIn<'a, B>,
 }
@@ -170,16 +189,32 @@ impl<B: UsbBus> UsbClass<B> for HIDClass<'_, B> {
     fn control_out(&mut self, xfer: ControlOut<B>) {
         let req = xfer.request();
 
-        if !(req.request_type == control::RequestType::Class
-            && req.recipient == control::Recipient::Interface
+        // FIXME: check request type?
+        // Half-copied from https://github.com/twitchyliquid64/usbd-hid/blob/c45cd8e173a545b132b589ccce9fea5d48177efb/src/hid_class.rs#L641
+
+        // Bail out if its not relevant to our interface.
+        if !(req.recipient == control::Recipient::Interface
             && req.index == u8::from(self.report_if) as u16)
         {
             return;
         }
 
-        xfer.reject().ok();
+        match req.request {
+            REQ_SET_REPORT => {
+                // FIXME: add more checks (eg data.len() == 1)
+                let data = xfer.data()[0];
+                self.leds = LedReport(data);
+                xfer.accept().ok();
+            }
+            _ => {
+                xfer.reject().ok();
+            }
+        }
     }
 }
+
+/// "Output" report for leds ("output" as in computer -> keyboard).
+struct LedReport(u8);
 
 const USB_CLASS_HID: u8 = 0x03;
 
@@ -198,7 +233,7 @@ const DESCRIPTOR_TYPE_REPORT: u8 = 0x22;
 const REQ_GET_REPORT: u8 = 0x01;
 // const REQ_GET_IDLE: u8 = 0x02;
 // const REQ_GET_PROTOCOL: u8 = 0x03;
-// const REQ_SET_REPORT: u8 = 0x09;
+const REQ_SET_REPORT: u8 = 0x09;
 // const REQ_SET_IDLE: u8 = 0x0a;
 // const REQ_SET_PROTOCOL: u8 = 0x0b;
 
@@ -214,10 +249,10 @@ const REQ_GET_REPORT: u8 = 0x01;
 //
 // FIXME: 0x01 aka ErrorRollOver can probably be ignored?
 const REPORT_DESCR: &[u8] = &[
-    0x05, 0x01, // USAGE_PAGE (Generic Desktop)
+    0x05, 0x01, // Usage Page (Generic Desktop)
     0x09, 0x06, // USAGE (Keyboard)
     0xa1, 0x01, // COLLECTION (Application)
-    0x05, 0x07, //   USAGE_PAGE (Keyboard/Keypad)
+    0x05, 0x07, //   Usage Page (Keyboard/Keypad)
     0x75, 0x01, //   Report Size (1)
     0x15, 0x00, //   Logical Minimum (0)
     0x25, 0x01, //   Logical Maximum (1)
@@ -234,5 +269,18 @@ const REPORT_DESCR: &[u8] = &[
     //
     0x95, 0x02, //   Report Count (0x02, 2)
     0x81, 0x03, //   Input (Constant, Variable, Absolute)
+    //
+    0x05, 0x08, //   Usage Page (Page# for LEDs),
+    0x19, 0x01, //   Usage Minimum (1, Num Lock),
+    0x29, 0x05, //   Usage Maximum (5, Kana),
+    0x91, 0x02, //   Output (Data, Variable, Absolute), ;LED report
+    0x95, 0x03, //   Report Count (3),
+    0x75, 0x01, //   Report Size (1),
+    0x91, 0x01, //   Output (Constant), ;LED report padding
+    0x95, 0x01, //   Report Count (1),
+    0x75, 0x01, //   Report Size (1),
+    0x15, 0x00, //   Logical Minimum (0),
+    0x25, 0x01, //   Logical Maximum(1),
+    //
     0xc0, //       END_COLLECTION
 ];

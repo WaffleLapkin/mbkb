@@ -28,6 +28,9 @@ mod app {
     #[local]
     struct Local {
         phy_layout: phy::layouts::Array<ErasedPin<Input<PullUp>>, 4>,
+        led: stm32f1xx_hal::gpio::gpioc::PC13<
+            stm32f1xx_hal::gpio::Output<stm32f1xx_hal::gpio::PushPull>,
+        >,
     }
 
     #[shared]
@@ -112,24 +115,30 @@ mod app {
             phy::layouts::Array::new(pins)
         };
 
+        let led = {
+            let mut gpioc = cx.device.GPIOC.split();
+            gpioc.pc13.into_push_pull_output(&mut gpioc.crh)
+        };
+
         // Spawn `on_tick` task that will poll buttons.
         //
         // Wait some time so usb can connect first.
         on_tick::spawn_after(1.secs()).ok();
 
-        let local = Local { phy_layout };
+        let local = Local { phy_layout, led };
         let shared = Shared { usb_dev, proto };
 
         (shared, local, init::Monotonics(mono))
     }
 
-    #[task(local = [phy_layout], shared=[proto])]
+    #[task(local = [phy_layout, led], shared=[proto])]
     fn on_tick(cx: on_tick::Context) {
         // Repeat the same task after 16 ms
         on_tick::spawn_after(16.millis()).ok();
 
         let proto = &mut *cx.shared.proto;
         let phy_layout = &mut *cx.local.phy_layout;
+        let led = &mut *cx.local.led;
 
         let mut report = UsbV1Report::empty();
 
@@ -142,6 +151,13 @@ mod app {
         });
 
         proto.set_report(report);
+
+        if proto.leds().caps_lock.enabled() {
+            // turn led on (??)
+            led.set_low()
+        } else {
+            led.set_high()
+        }
     }
 
     #[task(binds=USB_HP_CAN_TX, shared=[usb_dev, proto])]
