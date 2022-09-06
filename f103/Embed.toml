@@ -1,0 +1,3 @@
+[default.general]
+chip = "STM32F103C8"
+log_level = "WARN"
