@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 
-extern crate panic_semihosting;
+use panic_rtt_target as _;
 
 #[rtic::app(device = stm32f1xx_hal::stm32, peripherals = true, dispatchers = [EXTI0])]
 mod app {
@@ -67,6 +67,8 @@ mod app {
 
             (clocks, mono)
         };
+
+        rtt_target::rtt_init_print!();
 
         // Setup usb
         let (usb_dev, proto) = {

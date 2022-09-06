@@ -9,7 +9,8 @@ edition = "2018"
 cortex-m = "0.7"
 cortex-m-rt = "0.7"
 stm32f1xx-hal = { version = "0.8", features = ["stm32f103", "stm32-usbd", "rt"] }
-panic-semihosting = "0.5"
+panic-rtt-target = { version = "0.1.2", features = ["cortex-m"] }
+rtt-target = { version = "0.3", features = ["cortex-m"] }
 usb-device = "0.2"
 usbd-serial = "0.1"
 usbd-webusb = "1.0"

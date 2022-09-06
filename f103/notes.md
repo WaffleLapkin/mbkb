@@ -16,10 +16,17 @@ Just some notes so I do not forget stuff
 - Connect stlink in an stlinky way
 - Go to `f103` dir (important!)
   - Otherwise `f103/.cargo/config.toml` won't be used and everything'll be on fire
-- Run `c embed --release`
-  - Without `--release` the binary'll be too big
-    - At the time of writing about 2KB overboard
+- Run `c embed`
 
 ## Debugging
 
-I forgor 💀
+There are two common practices for debug, `println!` and debuggers.
+In this particular case it seems like they conflict with each other... for reasons? idk.
+
+When doing `println!`-style debugging, use `rprintln!` from `rtt-target`.
+
+When using debuggers you'll need to
+- Run `c embed with_gdb` (in `f103` dir)
+  - This allows `gdb` to connect, but
+  - Disables rtt, you won't be able to use `rptintln!` and won't see panic messages :(
+- Run `arm-none-eabi-gdb -q -x ../openocd.gdb` (in `f103` dir)

@@ -1,3 +1,16 @@
 [default.general]
 chip = "STM32F103C8"
 log_level = "WARN"
+
+[default.rtt]
+enabled = true
+
+[with_gdb.gdb]
+# Whether or not a GDB server should be opened after flashing.
+enabled = true
+# The connection string in host:port format wher the GDB server will open a socket.
+gdb_connection_string = "127.0.0.1:3333"
+
+[with_gdb.rtt]
+# rtt seems to be braking gdb, idk
+enabled = false

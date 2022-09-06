@@ -15,5 +15,6 @@ enumn = "0.1.3"
 [workspace]
 members = ["f103"]
 
-[profile.release]
-debug = true
+[profile.dev]
+# `opt-level = 0` can't fit into the flash drive :sweat_smile:
+opt-level = 1
