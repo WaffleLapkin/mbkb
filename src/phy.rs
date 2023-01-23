@@ -8,7 +8,7 @@ pub mod top;
 
 /// Physical layout of a keyboard.
 pub trait Layout {
-    /// Returns iterator of currently pressed keys.
+    /// Calls `f` with an iterator of currently pressed keys.
     ///
     /// Note that [`KeyId`]s should be stable across calls to [`poll`],
     /// executions and even non-breaking library changes. i.e. users should be
@@ -21,9 +21,10 @@ pub trait Layout {
     ///
     /// [`poll`]: Layout::poll
     /// [`max_key_id`]: Layout::max_key_id
-    fn poll(&mut self) -> &mut dyn Iterator<Item = KeyId>;
+    // FIXME: is there any way to do `dyn FnOnce` without alloc?
+    fn poll(&mut self, f: &mut dyn FnMut(&mut dyn Iterator<Item = KeyId>));
 
-    /// Maximum [`KeyId`] that can be returned from this [`poll`].
+    /// Maximum [`KeyId`] that can be returned from this [`poll`]'s iterator.
     ///
     /// [`poll`]: Layout::poll
     fn max_key_id(&self) -> KeyId;

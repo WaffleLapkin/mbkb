@@ -15,7 +15,6 @@ use crate::phy::{KeyId, Layout};
 /// high = key is depressed.
 pub struct Array<P, const N: usize> {
     pins: [P; N],
-    iter: ArrayIter<N>,
 }
 
 impl<P, const N: usize> Array<P, N> {
@@ -24,13 +23,7 @@ impl<P, const N: usize> Array<P, N> {
     /// **Note**: this expects **pull up** pins, i.e. low = key pressed, high =
     /// key is depressed.
     pub fn new(pins: [P; N]) -> Self {
-        Self {
-            pins,
-            iter: ArrayIter {
-                states: [false; N],
-                position: 0,
-            },
-        }
+        Self { pins }
     }
 }
 
@@ -38,44 +31,26 @@ impl<P, const N: usize> Layout for Array<P, N>
 where
     P: InputPin<Error = Infallible>,
 {
-    fn poll(&mut self) -> &mut dyn Iterator<Item = KeyId> {
-        self.iter.position = 0;
-        self.iter
-            .states
-            .iter_mut()
-            .zip(&self.pins)
-            // Unwrap: Error = Infallible
-            .for_each(|(state, pin)| *state = pin.is_low().unwrap());
+    fn poll(&mut self, f: &mut dyn FnMut(&mut dyn Iterator<Item = KeyId>)) {
+        let mut pressed = [false; N];
 
-        &mut self.iter
+        self.pins
+            .iter()
+            .zip(&mut pressed)
+            // Unwrap: Error = Infallible
+            .for_each(|(pin, state)| *state = pin.is_low().unwrap());
+
+        let mut iter = pressed
+            .iter()
+            .copied()
+            .enumerate()
+            .filter(|&(_, pressed)| pressed)
+            .map(|(k, _)| KeyId::from_raw(k as u16));
+
+        f(iter.by_ref())
     }
 
     fn max_key_id(&self) -> KeyId {
         KeyId::from_raw(N as _)
-    }
-}
-
-struct ArrayIter<const N: usize> {
-    // FIXME: should use bit array probably
-    states: [bool; N],
-    position: usize,
-}
-
-impl<const N: usize> Iterator for ArrayIter<N> {
-    type Item = KeyId;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.position >= N {
-            return None;
-        }
-
-        loop {
-            let p = self.position;
-            self.position += 1;
-
-            if *self.states.get(p)? {
-                break Some(KeyId::from_raw(p as _));
-            }
-        }
     }
 }
